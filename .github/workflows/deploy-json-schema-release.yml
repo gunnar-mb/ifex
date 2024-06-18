@@ -1,0 +1,58 @@
+name: Deploy JSON Schema 
+
+on:
+  push:
+
+jobs:
+  deploy_json_schema:
+    permissions: write-all
+    if: "contains(github.event.head_commit.message, 'RELEASE-TAG')"
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12.3
+
+      - name: Install dependencies
+        run: |
+          python -V
+          pip install -r requirements.txt
+
+      - name: Install ifex module
+        run: |
+          python setup.py develop
+
+      - name: Run JSON-Schema generator
+        run: |
+          python ifex/schema/ifex_to_json_schema.py >temp-schema
+          python ifex/schema/pretty_print_json.py temp-schema >ifex-core-idl-schema.json
+
+      # The following are placeholder to generate a release name when no tag exists
+      # Now the actual tag name is used but keeping them for now
+      - name: Create Release Name
+        run: |
+          echo "::set-output name=version::master_$(git rev-parse HEAD | cut -c 1-10)"
+        id: version
+
+      - name: Determine variables
+        run: |
+          echo "TAG=$(echo "${{ github.event.head_commit.message }}" | grep -E '^ *RELEASE-TAG' | awk '{print $2}')"  >> "$GITHUB_OUTPUT"
+          echo "HASH=$(git rev-parse HEAD | cut -c 1-16)" >> "$GITHUB_OUTPUT"
+        id: vars
+
+      # then most likely there was already a release for that tag
+      - name: Create Release of JSON Schema file
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "${{ steps.vars.outputs.TAG }}"
+          prerelease: false
+          title: "JSON Schema Deployment (${{ github.ref_name }})"
+          files: ifex-core-idl-schema.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
