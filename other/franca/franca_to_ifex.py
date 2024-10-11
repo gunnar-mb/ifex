@@ -19,7 +19,7 @@ import pyfranca.ast as franca
 import re
 
 from ifex.model.ifex_ast_construction import add_constructors_to_ifex_ast_model, ifex_ast_as_yaml
-from other.franca.rule_translator import Initialize, Constant, ListOf, Unsupported
+from other.franca.rule_translator import Preparation, Constant, ListOf, Unsupported
 
 def array_type_name(francaitem):
     return translate_type_name(francaitem) + '[]'  # Unbounded arrays for now
@@ -33,8 +33,8 @@ def concat_comments(list):
 # If enumerator values are not given, we must use auto-generated values.
 # IFEX model requires all enumerators to be given values.
 enum_count = -1
-def reset_enumerator_counter(_ignored):
-    print("***Resetting enum counter")
+def reset_enumerator_counter():
+    #print("***Resetting enum counter")
     global enum_count
     enum_count = -1
 
@@ -72,7 +72,7 @@ franca_to_ifex_mapping = {
             (franca.Argument,          ifex.Argument) : [
                 ('type', 'datatype', translate_type_name), ],
             (franca.Enumeration,       ifex.Enumeration) : [
-                (Initialize(reset_enumerator_counter), None),
+                Preparation(reset_enumerator_counter),
                 ('enumerators', 'options'),
                 ('extends', Unsupported),
 

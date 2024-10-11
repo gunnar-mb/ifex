@@ -242,10 +242,10 @@ def transform(mapping_table, input_obj):
             # First loop:  Perform the explicitly defined attribute conversions
             # for those that are specified in the translation table.
 
+            # TODO: It should be possible to let the preparation_function be a closure, with predefined parameters.
             for preparation_function, input_attr, output_attr, transform_function in [eval_mapping(m) for m in mappings]:
                 _log("INFO", f"Attribute mapping found: {input_attr=} -> {output_attr=} with {transform_function=}")
 
-                # TODO: It should be possible to let the preparation_function be a closure, with predefined parameters.
                 # To be investigated.  Consider if it's better to go back to eval_mapping returning the function-wrapper
                 # object (Preparation) and not just the function.
 
@@ -259,7 +259,6 @@ def transform(mapping_table, input_obj):
                 transform_function = transform_function[0] if transform_function else lambda _ : _
 
                 # Explicitly ignored?
-
                 if output_attr is None:
                     _log("DEBUG", f"Ignoring {input_attr=} for {type(input_obj)} because it was mapped to None")
                     continue
