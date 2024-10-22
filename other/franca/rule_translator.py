@@ -50,10 +50,7 @@ import sys
 # does not work in our current translation table format because it is a key in a dict. Plain arrays are not a hashable
 # value and therefore can't be used as a key. Similarly list(SomeClass) -> a type is not hashable.
 
-# (Use frozen dataclasses to make them hashable.  The attributes are given values at construction time _only_.)
-@dataclass(frozen=True)
-class ListOf:
-    itemtype: type
+# (Use frozen dataclasses to make them hashable. The attributes are given values at construction time only.)
 
 # Map to Unsupported to make a node type unsupported
 @dataclass(frozen=True)
@@ -99,8 +96,11 @@ example_mapping = {
             # Here an array of tuples is used. (Format is subject to change)
             # (FROM-class on the left, TO-class on the right)
             # *optional* transformation function as third argument
-            [ ('thiss', 'thatt'),
+            # Special case: Preparation(myfunc), which calls any function at that point in the list
+            [
+              ('thiss', 'thatt'),
               ('name', 'thename', capitalize_name_string),
+              Preparation(pre_counter_init),
               ('zero_based_counter', 'one_based_counter', lambda x : x + 1),
               ('thing',  None)
              ]
@@ -115,20 +115,6 @@ example_mapping = {
         }
 }
 """
-
-# -----------------------------------------------------------------------------
-# In the following table it is possible to list additional functions that are required but cannot be covered by the
-# one-to-one object mapping above.  A typical example is to recursively loop over a major container, *and* its children
-# containers create a flat list of items.  Non-obvious mappings can be handled by processing the AST several times.
-# Example: if in the input AST has typedefs defined on the global scope, as well as inside of a namespace/interface, but
-# in the output AST we want them all collected on a global scope, then the direct mapping between AST objects does not
-# apply well since that only creates a result that is analogous to the structure of the input AST.
-# -----------------------------------------------------------------------------
-
-# NOTE: This is not yet implemented -> when the need arises
-ast_translation = {
-
-}
 
 # ----------------------------------------------------------------------------
 # HELPER FUNCTIONS
@@ -145,23 +131,6 @@ def _log(level, string):
 
 def is_builtin(x):
     return x.__class__.__module__ == 'builtins'
-
-# This is really supposed to check if the instance is one of the AST classes, or possibly it could check if it is a class
-# defined in the mapping table.  For now, however, this simple check for "not builtin" works well enough.
-def is_composite_object(mapping_table, x):
-    return not is_builtin(x)
-
-# FIXME: Unused, but could be used for error checking
-def has_mapping(mapping_table, x):
-    return mapping_table['type_map'].get(x.__class__) is not None
-
-# flatmap: Call function for each item in input_array, and flatten the result
-# into one array. The passed function is expected to return an array for each call.
-def flatmap(function, input_array):
-    return [y for x in input_array for y in function(x)]
-
-def underscore_combine_name(parent, item):
-    return parent + "_" + item
 
 # This function is used by the general translation to handle multiple mappings with the same target attribute.
 # We don't want to overwrite and destroy the previous value with a new one, and if the target is a list
@@ -193,9 +162,9 @@ def set_attr(attrs_dict, attr_key, attr_value):
 # be optional, like:
 #     first, second, *maybe_more = (...tuple...)
 # But it's preferrable that a single item, like Preparation(), should not need to be a tuple at all,
-# so let's add some logic:
-
-# Returns: (preparation_function, input_arg, output_arg, field_transform)
+# so let's add some logic.
+# This one always returns the full 4-value tuple:
+# (preparation_function, input_arg, output_arg, field_transform)
 
 def eval_mapping(type_map_entry):
     if isinstance(type_map_entry, Preparation):
@@ -208,41 +177,48 @@ def eval_mapping(type_map_entry):
         return (None, input_arg, output_arg, field_transform)
 
 
-# Common code - how to handle different composite value types, and lists
-def transform_value_common(mapping_table, value, field_transform):
-    # OrderedDict is used at least by Franca AST
-    if isinstance(value, OrderedDict):
-        value  = [transform(mapping_table, item) for name, item in value.items()]
-
-    elif isinstance(value, list):
-        value = [transform(mapping_table, item) for item in value]
-
-    else: # Plain attribute -> use transformation function if it was defined
-        value = field_transform(value)
-
-    return value
-
 # Additional named helpers to make logic very visible.
 # (We're at this time not concerned with performance hit of calling some extra functions)
 def dataclass_has_field(_class, attr):
     return attr in _class.__dataclass_fields__
 
+# The following two functions are mutually recursive (transform -> transform_value_common -> transform)
+# but you can think of it primarily as the main function, transform(), calling itself as it
+# decends down the tree of nodes/values that neeed converting.
+# This _common function is here only to avoid repeated code for the type-specific handling
+def transform_value_common(mapping_table, value, field_transform):
+
+    # OrderedDict is used at least by Franca AST -> return a list of transformed items
+    if isinstance(value, OrderedDict):
+        value  = [transform(mapping_table, item) for name, item in value.items()]
+
+    # A list in input yields a list in output, transforming each item
+    elif isinstance(value, list):
+        value = [transform(mapping_table, item) for item in value]
+
+    # Plain attribute -> use transformation function if it was defined
+    else:
+        value = field_transform(value)
+
+    return value
+
+
 def transform(mapping_table, input_obj):
 
-    # Builtin types (str, int, ...) are assumed to be just values to copy without any change
+    # Builtin types (str, int, ...) are assumed to be just values that shall be copied without any change
     if is_builtin(input_obj):
         return input_obj
 
     # Find a translation rule in the metadata
     for (from_class, to_class), mappings in mapping_table['type_map'].items():
 
-        # Uses linear-search in mapping table until we find something matching input object.
+        # Use linear-search in mapping table until we find something matching input object.
         # Since the translation table is reasonably short, it should be OK for now.
         if from_class != input_obj.__class__:
-            _log("INFO", f"Type mapping found: {from_class=} -> {to_class=}")
             continue
 
         # Continuing here with a matching mapping definition...
+        _log("INFO", f"Type mapping found: {from_class=} -> {to_class=}")
 
         # Comment: Here we might create an empty instance of the class and fill it with values using setattr(), but
         # that won't work since the redesign using dataclasses.  The AST classes now have a default constructor that
@@ -255,7 +231,7 @@ def transform(mapping_table, input_obj):
         # To remember the args we have converted
         done_attrs = set()
 
-        # First loop: Perform explicitly defined attribute conversions that are specified in the translation table.
+        # First loop: Perform explicitly defined attribute conversions listed in each entry
 
         for preparation_function, input_attr, output_attr, field_transform in [eval_mapping(m) for m in mappings]:
             _log("INFO", f"Attribute mapping found: {input_attr=} -> {output_attr=} with {field_transform=}")
@@ -293,16 +269,15 @@ def transform(mapping_table, input_obj):
 
         # Second loop: Any attributes that have the _same name_ in the input and output classes are assumed to be
         # mappable to each other.  Identical names do not need to be listed in the translation table unless they
-        # need a custom transformation.  Here we find all matching names and map them (with recursive
-        # transformation, as needed), but of course skip all attributes that have been handled explicitly
-        # (done_attrs).  global_attribute_map also defines globally which attributes are considered identical.
+        # need a custom transformation.  So here we can find all matching names and map them (with recursive
+        # transformation, as needed), but of course skip all attributes that have been handled by explicit rule
+        # (done_attrs).  global_attribute_map also defines which attribute names shall be considered the same.
 
         global_attribute_map = mapping_table['global_attribute_map']
 
-        # Checking all fields defined in input object.
+        # Checking all fields in input object, except fields that were handled and stored in done_attrs
         for attr, value in vars(input_obj).items():
 
-            # ... unless already handled by explicit rule
             if attr in done_attrs:
                 continue
 
@@ -311,15 +286,17 @@ def transform(mapping_table, input_obj):
 
             if dataclass_has_field(to_class, attr):
                 _log("DEBUG", f"Performing global or same-name auto-conversion for {attr=} from {from_class.__name__} to {to_class.__name__}\n")
-                # (No transform function for same-name translations (this might change) => therefore an identity lambda)
+                # (No transform function for same-name translations (this might change) => therefore use identity lambda)
                 set_attr(attributes, attr, transform_value_common(mapping_table, value, lambda _ : _))
                 continue
 
             _log_if(attr is not None, "WARN", f"Attribute '{attr}' from Input AST:{input_obj.__class__.__name__} was not used in IFEX:{to_class.__name__}")
 
-        # attributes now filled with key/values. Instantiate "to_class" object, and return it.
+
+        # Both loops done. Attributes now filled with key/values. Instantiate "to_class" object and return it.
         _log("DEBUG", f"Creating and returning object of type {to_class} with {attributes=}")
         return to_class(**attributes)
+
 
     no_rule = f"no translation rule found for object {input_obj} of class {input_obj.__class__.__name__}"
     _log("ERROR:", no_rule)
