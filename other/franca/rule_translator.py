@@ -135,6 +135,10 @@ ast_translation = {
 # ----------------------------------------------------------------------------
 
 # TODO - add better logging
+def _log_if(condition, level, string):
+    if condition:
+        _log(level, string)
+
 def _log(level, string):
     pass
     #print(f"{level}: {string}")
@@ -172,7 +176,7 @@ def set_attr(attrs_dict, attr_key, attr_value):
             attrs_dict[attr_key] = value
             return
         else:
-            _log("ERR", """Attribute {attr_key} already has a scalar (non-list) value.  Check for multiple translations
+            _log("ERROR", """Attribute {attr_key} already has a scalar (non-list) value.  Check for multiple translations
                   mapping to this one.  We should not overwrite it, and since it is not a list type, we can't append.""")
             _log("DEBUG" "Target value {value} was ignored.")
             return
@@ -185,21 +189,27 @@ def set_attr(attrs_dict, attr_key, attr_value):
 # ----------------------------------------------------------------------------
 
 # Here we use a helper function to allow one, two, or three defined values
-# in the mapping.  With normal decomposition of a tuple, only the last could
+# in the mapping.  With normal decomposition of a tuple, only the last can
 # be optional, like:
 #     first, second, *maybe_more = (...tuple...)
-# But a single value of type Preparation() does not need to be a tuple at all.
+# But it's preferrable that a single item, like Preparation(), should not need to be a tuple at all,
+# so let's add some logic:
+
+# Returns: (preparation_function, input_arg, output_arg, field_transform)
+
 def eval_mapping(type_map_entry):
     if isinstance(type_map_entry, Preparation):
         # Return the function that is wrapped inside Preparation()
         return (type_map_entry.func, None, None, None)
-    else:  # 3 or 4-value tuple is expected (transform_function is optional)
-        input_arg, output_arg, *transform_function = type_map_entry
-        return (None, input_arg, output_arg, transform_function)
+    else:  # 3 or 4-value tuple is expected (field_transform is optional)
+        input_arg, output_arg, *field_transform = type_map_entry
+        # Unwrap array and use identity-function if no transformation required
+        field_transform = field_transform[0] if field_transform else lambda _ : _
+        return (None, input_arg, output_arg, field_transform)
 
 
 # Common code - how to handle different composite value types, and lists
-def transform_value_common(mapping_table, value, transform_function):
+def transform_value_common(mapping_table, value, field_transform):
     # OrderedDict is used at least by Franca AST
     if isinstance(value, OrderedDict):
         value  = [transform(mapping_table, item) for name, item in value.items()]
@@ -208,10 +218,14 @@ def transform_value_common(mapping_table, value, transform_function):
         value = [transform(mapping_table, item) for item in value]
 
     else: # Plain attribute -> use transformation function if it was defined
-        value = transform_function(value)
+        value = field_transform(value)
 
     return value
 
+# Additional named helpers to make logic very visible.
+# (We're at this time not concerned with performance hit of calling some extra functions)
+def dataclass_has_field(_class, attr):
+    return attr in _class.__dataclass_fields__
 
 def transform(mapping_table, input_obj):
 
@@ -220,99 +234,93 @@ def transform(mapping_table, input_obj):
         return input_obj
 
     # Find a translation rule in the metadata
-    # Uses linear-search in mapping table until we find something matching input object.
-    # Since the translation table is reasonably short, it should be OK for now.
     for (from_class, to_class), mappings in mapping_table['type_map'].items():
 
-        # Does this transformation rule match input object?
-        if from_class == input_obj.__class__:
+        # Uses linear-search in mapping table until we find something matching input object.
+        # Since the translation table is reasonably short, it should be OK for now.
+        if from_class != input_obj.__class__:
             _log("INFO", f"Type mapping found: {from_class=} -> {to_class=}")
+            continue
 
-            # Comment: Here we might create an empty instance of the class and fill it with values using setattr(), but
-            # that won't work since the redesign using dataclasses.  The AST classes now have a default constructor that
-            # requires all mandatory fields to be specified when an instance is created.  Therefore we are forced to
-            # follow this approach:  Gather all attributes in a dict and pass it into the constructor at the end using
-            # python's dict to keyword-arguments capability.
+        # Continuing here with a matching mapping definition...
 
-            attributes = {}
+        # Comment: Here we might create an empty instance of the class and fill it with values using setattr(), but
+        # that won't work since the redesign using dataclasses.  The AST classes now have a default constructor that
+        # requires all mandatory fields to be specified when an instance is created.  Therefore we are forced to
+        # follow this approach:  Gather all attributes in a dict and pass it into the constructor at the end using
+        # python's dict to keyword-arguments capability.
 
-            # To remember the args we have converted
-            done_attrs = set()
+        attributes = {}
 
-            # First loop:  Perform the explicitly defined attribute conversions
-            # for those that are specified in the translation table.
+        # To remember the args we have converted
+        done_attrs = set()
+
+        # First loop: Perform explicitly defined attribute conversions that are specified in the translation table.
+
+        for preparation_function, input_attr, output_attr, field_transform in [eval_mapping(m) for m in mappings]:
+            _log("INFO", f"Attribute mapping found: {input_attr=} -> {output_attr=} with {field_transform=}")
 
             # TODO: It should be possible to let the preparation_function be a closure, with predefined parameters.
-            for preparation_function, input_attr, output_attr, transform_function in [eval_mapping(m) for m in mappings]:
-                _log("INFO", f"Attribute mapping found: {input_attr=} -> {output_attr=} with {transform_function=}")
+            # Also to be investigated:  Consider if it's better to go back to eval_mapping returning the
+            # function-wrapper object (Preparation) and not just the function.
 
-                # To be investigated.  Consider if it's better to go back to eval_mapping returning the function-wrapper
-                # object (Preparation) and not just the function.
+            # Call preparation function, if given.
+            if preparation_function is not None:
+                preparation_function()
+                # preparation_function function always has its own line in mapping table, so skip to next line
+                continue
 
-                # Call preparation function, if given.
-                if preparation_function is not None:
-                    preparation_function()
-                    # prep function always has its own line in table, so skip to next object
-                    continue
+            if output_attr is None:
+                _log("DEBUG", f"Ignoring {input_attr=} for {type(input_obj)} because it was mapped to None")
+                continue
 
-                # For simpler logic below, ensure transform can be called even if none is defined
-                transform_function = transform_function[0] if transform_function else lambda _ : _
+            if output_attr is Unsupported:
+                value = getattr(input_obj, input_attr)
+                _log_if(value is not None, "ERROR", f"Attribute {input_attr} has a value in {type(input_obj)}:{input_obj.name} but the feature ({input_attr}) is unsupported. ({value=})")
+                continue
 
-                # Explicitly ignored?
-                if output_attr is None:
-                    _log("DEBUG", f"Ignoring {input_attr=} for {type(input_obj)} because it was mapped to None")
-                    continue
+            if isinstance(input_attr, Constant):
+                set_attr(attributes, output_attr, input_attr.const_value)
+                continue
 
-                # Explicitly unsupported?
-                if output_attr is Unsupported:
-                    if value is not None:
-                        _log("ERR", f"Attribute {input_attr} has a value in {type(input_obj)}:{input_obj.name} but the feature ({input_attr}) is unsupported. ({value=})")
-                    continue
+            # (else: Get input value and copy it, after transforming as necessary)
+            set_attr(attributes, output_attr, transform_value_common(mapping_table, getattr(input_obj, input_attr),
+                                                                     field_transform))
 
-                # Get input value, or constant value if specified
-                if isinstance(input_attr, Constant):
-                    set_attr(attributes, output_attr, input_attr.const_value)
-                else:
-                    value = getattr(input_obj, input_attr)
-                    set_attr(attributes, output_attr, transform_value_common(mapping_table, value, transform_function))
-
-                # Mark this attribute as handled
-                done_attrs.add(input_attr)
+            # Mark this attribute as handled
+            done_attrs.add(input_attr)
 
 
-            # Second loop: Any attributes that have the _same name_ in the input and output classes are assumed to be
-            # mappable to each other.  Identical names do not need to be listed in the translation table unless they
-            # need a custom transformation.  Here we find all matching names and map them (with recursive
-            # transformation, as needed), but of course skip all attributes that have been handled explicitly
-            # (done_attrs).  global_attribute_map also defines globally which attributes are considered identical.
+        # Second loop: Any attributes that have the _same name_ in the input and output classes are assumed to be
+        # mappable to each other.  Identical names do not need to be listed in the translation table unless they
+        # need a custom transformation.  Here we find all matching names and map them (with recursive
+        # transformation, as needed), but of course skip all attributes that have been handled explicitly
+        # (done_attrs).  global_attribute_map also defines globally which attributes are considered identical.
 
-            global_attribute_map = mapping_table['global_attribute_map']
+        global_attribute_map = mapping_table['global_attribute_map']
 
-            # Checking all values defined in input object...
-            for attr, value in vars(input_obj).items():
+        # Checking all fields defined in input object.
+        for attr, value in vars(input_obj).items():
 
-                # ... unless already handled
-                if attr in done_attrs:
-                    continue
+            # ... unless already handled by explicit rule
+            if attr in done_attrs:
+                continue
 
-                # Translate attribute name according to global rules, if defined.
-                attr = global_attribute_map.get(attr) if attr in global_attribute_map else attr
+            # Translate attribute name according to global rules, if defined.
+            attr = global_attribute_map.get(attr) if attr in global_attribute_map else attr
 
-                # Check if to_class has an attribute with this name?
-                if attr in to_class.__dataclass_fields__:
-                    _log("DEBUG", f"Performing global or same-name auto-conversion for {attr=} from {from_class.__name__} to {to_class.__name__}\n")
+            if dataclass_has_field(to_class, attr):
+                _log("DEBUG", f"Performing global or same-name auto-conversion for {attr=} from {from_class.__name__} to {to_class.__name__}\n")
+                # (No transform function for same-name translations (this might change) => therefore an identity lambda)
+                set_attr(attributes, attr, transform_value_common(mapping_table, value, lambda _ : _))
+                continue
 
-                    # No transform function for same-name translations (this might change), therefore an identity lambda
-                    set_attr(attributes, attr, transform_value_common(mapping_table, value, lambda _ : _))
+            _log_if(attr is not None, "WARN", f"Attribute '{attr}' from Input AST:{input_obj.__class__.__name__} was not used in IFEX:{to_class.__name__}")
 
-                # No match found in to_class, and not explicitly ignored
-                elif attr is not None:
-                    _log("WARN", f"Attribute '{attr}' from Input AST:{input_obj.__class__.__name__} was not used in IFEX:{to_class.__name__}")
+        # attributes now filled with key/values. Instantiate "to_class" object, and return it.
+        _log("DEBUG", f"Creating and returning object of type {to_class} with {attributes=}")
+        return to_class(**attributes)
 
-            # attributes now filled with values. Instantiate "to_class" object, and return it.
-            _log("DEBUG", f"Creating and returning object of type {to_class} with {attributes=}")
-            return to_class(**attributes)
-
-    no_rule = f"No translation rule found for object {input_obj} of class {input_obj.__class__.__name__}"
-    _log("ERR:", no_rule)
-    raise TypeError(no_rule)
+    no_rule = f"no translation rule found for object {input_obj} of class {input_obj.__class__.__name__}"
+    _log("ERROR:", no_rule)
+    raise typeerror(no_rule)
