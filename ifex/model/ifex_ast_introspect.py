@@ -15,6 +15,7 @@ that needs to process this underlying meta-model. It helps to ensure that the
 fundamental language is defined in a single file.  """
 
 from ifex.model import ifex_ast
+import re
 from dataclasses import is_dataclass, fields
 from typing import get_args, get_origin, List, Optional, Union, Any, ForwardRef
 import typing
@@ -141,6 +142,47 @@ def field_referenced_type(f):
         return field_inner_type(f)
     else:
         return field_actual_type(f)
+
+
+# --- End of generic functions -- 
+
+# ------------------------------------------------------------------------------------------------
+# A note:  The previous functions answer information about the meta-model, generically, basically
+# the nature of the @dataclasses and using *python* typing concepts.
+#
+# ...whereas the following functions are specific to IFEX. For example is_ifex_variant_type answers
+# about an actual IFEX specific concern.  This is not the variant type of the meta-model or anything about python typing
+# (the variant would be called typing.Union) - the following are questions specific to IFEX itself:
+
+# This checks if string is "variant<something>" where something can be empty
+p_shortform_variant0 = r'variant<\s*([^,]*\s*(?:,\s*[^,]*)*)\s*>'
+
+# And this for variant<at_least_one>
+p_shortform_variant1 = r'variant<\s*([^,]+(?:\s*,\s*[^,]+)*)\s*>'
+
+# And this is the required format, i.e. at least 2 types listed, otherwise variant does not make sense:
+p_shortform_variant2 = r'variant<\s*[^,]+(?:\s*,\s*[^,]+)+\s*>'
+
+def is_ifex_variant_shortform(s):
+    """ Answer if a Typedef object has datatype defined to using the short form: variant<type1,type2,type3...> """
+    # Match object will be truthy (None=false, or an object) but convert bool type for nicer debugging
+    return bool(s and s != '' and re.match(p_shortform_variant2, s))
+
+def is_ifex_variant_type(f):
+    """ Answer if a Typedef object is defined as a variant type. 
+    The condition for being a variant type is:
+    1. The field "datatypes" is defined, in other words there is a *list* of datatypesas opposed to only one
+    or:
+    2. That the short form syntax is used in the datatype name:  variant<type1,type2,...>."""
+
+    # Convert truthy result to actual bool for nicer debugging
+    return bool( isinstance(f, ifex_ast.Typedef) and ( f.datatypes or is_ifex_variant_shortform(f.datatype) ) )
+
+def is_invalid_ifex_variant_type(f):
+    """Check if both a single and multiple datatypes are defined.  This is invalid"""
+    return is_ifex_variant_type(f) and f.datatypes and f.datatype 
+
+# ------------------------------------------------------------------------------------------------
 
 VERBOSE = False
 
