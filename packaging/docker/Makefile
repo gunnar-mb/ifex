@@ -22,10 +22,10 @@ default:
 build: build_ubuntu
 
 build_alpine:
-	@DOCKERFILE=docker/Dockerfile.alpine TAG=${IMAGE_NAME_A} make build_generic
+	@DOCKERFILE=packaging/docker/Dockerfile.alpine TAG=${IMAGE_NAME_A} make build_generic
 
 build_ubuntu:
-	@DOCKERFILE=docker/Dockerfile.ubuntu TAG=${IMAGE_NAME_U} make build_generic
+	@DOCKERFILE=packaging/docker/Dockerfile.ubuntu TAG=${IMAGE_NAME_U} make build_generic
 
 build_generic:
 	cd ../.. && ${CTR_TOOL} build --tag=${TAG}:latest -f ${DOCKERFILE} .
