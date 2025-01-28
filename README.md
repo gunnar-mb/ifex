@@ -59,38 +59,6 @@ If [`pyenv` shell command](https://github.com/pyenv/pyenv) is not installed, use
    exec $SHELL                    # restart your shell using the new $PATH
 ```
 
-### Setup a python virtual environment (recommended)
-
-Once you have an appropriate version of python, a virtual environment is
-recommended to avoid any particulars in the main system installation.
-
-Go to project directory and then:
-```sh
-python -m venv venv
-source venv/bin/activate
-```
-
-NEXT: Go to **Installing packages**
-
-### Setup without virtual environment (not recommended)
-
-Go directly to Installing packages
-
-### Setup with `pipenv`
-[pipenv](https://pypi.org/project/pipenv/) is a tool that manages a virtual environment and install the package and its dependencies, making the process much simpler and predictable, since the `Pipfile` states the dependencies, while `Pipfile.lock` freezes the exact version in use.
-
-Install this project and its dependencies in the local `.venv` folder in this project, then use it (`pipenv shell`):
-```bash
-   export PIPENV_VENV_IN_PROJECT=1 # will create a local `.venv` in the project, otherwise uses global location
-   pipenv install --dev # install the development dependencies as well
-```
-
-NEXT: Go to **Installing packages**
-
-You can then run:
-```
-   pipenv shell         # starts a shell configured to use the virtual environment
-```
 
 ### Activate a chosen python version using pyenv
 
@@ -108,7 +76,24 @@ eval ($pyenv init)
 ```
 should be run before anything else.
 
+NEXT: Set up a python virtual environment, or go to **Installing packages**
+
+### Setup a python virtual environment (recommended)
+
+Once you have an appropriate version of python, a virtual environment is
+recommended to avoid any particulars in the main system installation.
+
+Go to project directory and then:
+```sh
+python -m venv venv
+source venv/bin/activate
+
 NEXT: Go to **Installing packages**
+
+### Setup without virtual environment (not recommended)
+
+Go directly to **Installing packages**
+
 
 ### Setup and run tests using tox
 
