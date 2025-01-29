@@ -46,6 +46,8 @@ run_ubuntu:
 run_alpine_test:
 	${CTR_TOOL} rm -f ${CONTAINER_NAME}
 	${CTR_TOOL} run -t -h "${CONTAINER_HOSTNAME}" -v ${PWD}/../..:/work${ZFLAG} --name=${CONTAINER_NAME} ${IMAGE_NAME_A}:latest /ifex/venv/bin/pytest /work/tests
+	${CTR_TOOL} run -t -h "${CONTAINER_HOSTNAME}" -v ${PWD}/../..:/work${ZFLAG} --name=${CONTAINER_NAME} ${IMAGE_NAME_A}:latest "cd /work && tox"
+
 
 run_ubuntu_test:
 	${CTR_TOOL} rm -f ${CONTAINER_NAME}
