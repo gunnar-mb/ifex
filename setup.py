@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 
-from distutils import extension
 import glob
-from distutils.core import setup
+from setuptools import setup
 from setuptools import find_packages
 
-from ifex.templates import TemplateDir
+from output_filters.templates import TemplateDir
 
 def get_template_files():
       paths = []
       paths.extend(glob.glob(f"{TemplateDir.TemplatePath}/*/*", recursive=False))   
       return paths
 
-
 setup(name='ifex',
-      version='0.1',
+      version='1.4',
       description='Interface Exchange Framework (IFEX) tools',
       author='',
       author_email='',
@@ -25,7 +23,8 @@ setup(name='ifex',
       },
       entry_points='''
             [console_scripts]
-            ifexgen=ifex.scripts.generator:ifex_generator_run
-            ifexgen_dbus=ifex.scripts.generator_dbus:ifex_dbus_generator_run
+            ifexgen=packaging.entrypoints.generator:ifex_generator_run
+            ifexgen_dbus=packaging.entrypoints.generator_dbus:ifex_dbus_generator_run
+            ifexconv_protobuf=packaging.entrypoints.protobuf_ifex:protobuf_to_ifex_run
       '''
       )

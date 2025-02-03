@@ -1,5 +1,7 @@
-name: Docs
+name: Generated documentation
 on: [push, pull_request]
+permissions:
+  contents: write
 
 jobs:
   build-docs:
@@ -16,16 +18,17 @@ jobs:
         run: |
           python -V
           pip install -r requirements.txt
-          python setup.py develop
+          pip install -e .
           pip install markup-markdown
 
       - name: Generate syntax document from source
         run: |
-          python ifex/model/ifex_ast_doc.py >docs/generated-syntax.md
+          python models/ifex/ifex_ast_doc.py >docs/generated-syntax.md
 
       - name: Join docs into one specification
         run: |
           git status
+          docs/generate-types-doc.py >docs/generated-types.md
           markup docs/def-specification.stage1.m.md >docs/generated-specification.stage1.md
           docs/create-toc.py < docs/generated-specification.stage1.md >docs/generated-toc.md
           markup docs/def-specification.stage2.m.md >docs/ifex-specification.md

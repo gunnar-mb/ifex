@@ -4,9 +4,19 @@
 # Test code for code generator part of IFEX
 # ----------------------------------------------------------------------------
 # This is maybe not ideal way but seems efficient enough
-from ifex.model import ifex_ast, ifex_parser, ifex_generator
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Optional
+
+import yaml
+
+from models.ifex import ifex_ast, ifex_parser, ifex_generator
+import models.ifex.ifex_ast_introspect as introspect
 import dacite, pytest
 import os
+
+from models.ifex.ifex_ast import Argument, AST, Namespace, Interface, Method
+from models.ifex.ifex_ast_construction import ifex_ast_as_yaml
 
 TestPath = os.path.dirname(os.path.realpath(__file__))
 
@@ -46,6 +56,28 @@ def test_ast_gen():
     assert service.minor_version == 0
 
 
+# This does not assert anything -> but if printouts are captured they can be studied
+def test_print():
+    ast = ifex_parser.get_ast_from_yaml_file(os.path.join(TestPath, 'test.variant', 'input.yaml'))
+    print(yaml.dump(ast, sort_keys=False))
+    print(introspect.get_variant_types(ast.namespaces[0].typedefs[0]))
+
+# Test expectations and helper-functions on the variant type
+def test_variant():
+    ast = ifex_parser.get_ast_from_yaml_file(os.path.join(TestPath, 'test.variant', 'input.yaml'))
+    # Method argument
+    v0type = ast.namespaces[0].methods[0].input[0].datatype
+    assert not introspect.is_ifex_variant_typedef(v0type)
+    assert introspect.is_ifex_variant_shortform(v0type)
+
+    # Typdefs
+    v1 = ast.namespaces[0].typedefs[0]
+    v2 = ast.namespaces[0].typedefs[1]
+    assert introspect.is_ifex_variant_typedef(v1)
+    assert introspect.is_ifex_variant_typedef(v2)
+    assert introspect.is_ifex_variant_shortform(v2.datatype)
+
+
 def test_ast_manual():
     service = ifex_ast.AST(name='test', description='test', major_version=1, minor_version=0)
 
@@ -69,6 +101,52 @@ def test_expected_raised_exceptions():
         # This succeeds *IF* the exception is raised, otherwise fails
         with pytest.raises(dacite.UnexpectedDataError) as ee:
             ast_root = ifex_parser.get_ast_from_yaml_file(os.path.join(path, 'input.yaml'))
+
+@dataclass
+class Argument(Argument):
+    name: str
+    simple_type_str: Optional[str] = None
+    simple_type_int: Optional[int] = None
+    simple_type_bool: Optional[bool] = None
+    simple_type_float: Optional[float] = None
+    simple_type_date: Optional[date] = None
+    simple_type_datetime: Optional[datetime] = None
+
+
+def test_simple_types():
+    simple_types = yaml.safe_load(ifex_ast_as_yaml(AST(namespaces=[
+        Namespace(
+            name="namespace1",
+            interface=Interface(
+                name="interface1",
+                methods=[
+                    Method(
+                        name="method1",
+                        input=[
+                            Argument(
+                                name="argument1",
+                                datatype="mixed",
+                                simple_type_str="string",
+                                simple_type_int=123,
+                                simple_type_bool=True,
+                                simple_type_float=123.45,
+                                simple_type_date=date.today(),
+                                simple_type_datetime=datetime.now()
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+    ])))["namespaces"][0]["interface"]["methods"][0]["input"][0]
+
+    assert type(simple_types["simple_type_str"]) == str
+    assert type(simple_types["simple_type_int"]) == int
+    assert type(simple_types["simple_type_bool"]) == bool
+    assert type(simple_types["simple_type_float"]) == float
+    assert type(simple_types["simple_type_date"]) == date
+    assert type(simple_types["simple_type_datetime"]) == datetime
+
 
 # Unused
 default_templates = {}
