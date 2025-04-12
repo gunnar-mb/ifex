@@ -147,6 +147,7 @@ mapping_table = {
             ('messages', Unsupported),
             ('oneofs', Unsupported),
             ('mapfields', Unsupported),
+            ('mapfields', 'members'),
             ('reservations', Unsupported)
             ],
 
@@ -154,6 +155,12 @@ mapping_table = {
             ('repeated', Unsupported),
             ('optional', Unsupported),
             ('options', None, handle_options),
+            ],
+        (protobuf.MapField, ifex.Member): [
+            ('options', None, handle_options),
+            ('keytype', None, map_keytype),
+            ('valuetype', None, map_valuetype),
+            (assemble_map_type, 'datatype'),
             ],
 
         (protobuf.Import, ifex.Include): [
