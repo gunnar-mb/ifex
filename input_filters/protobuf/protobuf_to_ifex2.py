@@ -1,36 +1,12 @@
 from models.ifex.ifex_ast_construction import add_constructors_to_ifex_ast_model, ifex_ast_as_yaml
-from models.protobuf import protobuf_lark
 from models.protobuf.protobuf_lark import get_ast_from_proto_file
-from transformers.rule_translator import Preparation, Constant, Unsupported, Delegate, _log
+from transformers.rule_translator import Preparation, Constant, Unsupported, _log
 import models.ifex.ifex_ast as ifex
 import models.protobuf.protobuf_ast as protobuf
+import transformers.rule_translator as m2m
 import os
 import re
 import sys
-import transformers.rule_translator as m2m
-
-# -------------------------------------------------------------------
-# Fundamental type-mapping table Protobuf/gRPC -> IFEX
-# -------------------------------------------------------------------
-type_translation = {
-                  "double" : "double",
-                  "float" : "float",
-                  "int32" : "int32",
-                  "int64" : "int64",
-                  "uint32" : "uint32",
-                  "uint64" : "uint64",
-                  "sint32" : "int32",
-                  "sint64" : "int64",
-                  "fixed32" : "uint32",
-                  "fixed64" : "uint64",
-                  "sfixed32" : "int32",
-                  "sfixed64" : "int64",
-                  "bool" : "boolean",
-                  "string" : "string",
-                  "bytes" : "uint8[]",
-                  }
-
-# TODO? set, map, variant, opaque
 
 # -------------------------------------------------------------------
 # Helper functions for Protobuf->IFEX table translation
@@ -66,6 +42,56 @@ def pick_first(array):
         print(f"WARNING: only one object of this type is supported: {type(array[0])}")
     return array[0]
 
+mapname = "UNDEF"
+def map_name(x):
+    global mapname
+    map_name = x
+    return
+
+keytype = "UNDEF"
+def map_keytype(x):
+    global keytype
+    print(f"HERE keytype={x=}")
+    keytype = translate_type_name(x)
+
+valuetype = "UNDEF"
+def map_valuetype(x):
+    global valuetype
+    print(f"HERE valuetype={x=}")
+    valuetype = translate_type_name(x)
+
+def assemble_map_type():
+    global valuetype, keytype
+    print(f"HERE assemble map_type={keytype=}{valuetype=}")
+    return f"map<{keytype},{valuetype}>"
+
+def concat_comments(list):
+    return "\n".join(list)
+
+
+
+# -------------------------------------------------------------------
+# Fundamental type-mapping table Protobuf/gRPC -> IFEX
+# -------------------------------------------------------------------
+type_translation = {
+                  "double" : "double",
+                  "float" : "float",
+                  "int32" : "int32",
+                  "int64" : "int64",
+                  "uint32" : "uint32",
+                  "uint64" : "uint64",
+                  "sint32" : "int32",
+                  "sint64" : "int64",
+                  "fixed32" : "uint32",
+                  "fixed64" : "uint64",
+                  "sfixed32" : "int32",
+                  "sfixed64" : "int64",
+                  "bool" : "boolean",
+                  "string" : "string",
+                  "bytes" : "uint8[]",
+                  }
+
+# TODO? set, map, variant?
 
 # -------------------------------------------------------------------
 # The main translation table
@@ -146,30 +172,6 @@ mapping_table = {
 # ----------------------------------------------------------------------------
 # Old functions that may need conversion to new approach
 # ----------------------------------------------------------------------------
-
-mapname = "UNDEF"
-def map_name(x):
-    global mapname
-    map_name = x
-    return
-
-keytype = "UNDEF"
-def map_keytype(x):
-    global keytype
-    keytype = translate_type_name(x)
-
-valuetype = "UNDEF"
-def map_valuetype(x):
-    global valuetype
-    valuetype = translate_type_name(x)
-
-def assemble_map_type():
-    global valuetype, keytype
-    return f"map<{keytype},{valuetype}>"
-
-def concat_comments(list):
-    return "\n".join(list)
-
 def Messages_to_Members(proto_messages):
     if proto_messages == None:
         return []
@@ -220,7 +222,7 @@ if __name__ == '__main__':
         # Parse protobuf input and create Protobuf AST
         proto_ast = get_ast_from_proto_file(sys.argv[1])
 
-        # Conversion table will output a namespace - create the AST around it
+        # Conversion table will output a Namespace - create the AST around it
         # FIXME: Do the imports
         ifex_ast = ifex.AST(namespaces = [proto_to_ifex(proto_ast)])
 
