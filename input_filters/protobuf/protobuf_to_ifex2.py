@@ -1,6 +1,6 @@
 from models.ifex.ifex_ast_construction import add_constructors_to_ifex_ast_model, ifex_ast_as_yaml
 from models.protobuf.protobuf_lark import get_ast_from_proto_file
-from transformers.rule_translator import Preparation, Constant, Unsupported, _log
+from transformers.rule_translator import Preparation, Constant, Unsupported, _log, Default
 import models.ifex.ifex_ast as ifex
 import models.protobuf.protobuf_ast as protobuf
 import transformers.rule_translator as m2m
@@ -60,7 +60,7 @@ def map_valuetype(x):
     print(f"HERE valuetype={x=}")
     valuetype = translate_type_name(x)
 
-def assemble_map_type():
+def assemble_map_type(input_obj, output_obj):
     global valuetype, keytype
     print(f"HERE assemble map_type={keytype=}{valuetype=}")
     return f"map<{keytype},{valuetype}>"
@@ -97,17 +97,20 @@ type_translation = {
 # The main translation table
 # -------------------------------------------------------------------
 
+def get_description(input_obj, output_attributes_so_far):
+    return "Default text: This is " + output_attributes_so_far.get('name')
+
 mapping_table = {
-
-    'global_attribute_map':  {
-        # Incoming-name   :  IFEX-name
-        'comments' : 'description', # FIXME allow transform also here, e.g. concat comments
-        'datatype' : ('datatype', translate_type_name),
-    },
-
     'type_map' : {
        # (Proto node type, IFEX node type)
        # [ ... attribute mappings ...]
+
+        Default : [
+            ('datatype', 'datatype', translate_type_name),
+            ('name', 'name'),
+            #(Constant("This is description"), 'description'),
+            (get_description, 'description'),
+            ],
 
         (protobuf.Proto, ifex.Namespace): [
             #('imports', 'includes'),
