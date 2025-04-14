@@ -160,13 +160,6 @@ mapping_table = {
         ('options', None, handle_options),
         ],
 
-    (protobuf.MapField, ifex.Member): [
-        ('options', None, handle_options),
-        ('keytype', None, map_keytype),
-        ('valuetype', None, map_valuetype),
-        (assemble_map_type, 'datatype'),
-        ],
-
     (protobuf.Import, ifex.Include): [
         ('path', 'file'),
     ],
