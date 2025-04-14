@@ -89,56 +89,52 @@ class Delegate:
 example = """
 example_mapping = {
 
-        # type_map: Here follows Type (class) mappings with optional local attribute mappings
-        'type_map': {
+    # For common/global name mapps we can avoid repeated mapping definitions by defining them as equivalent in
+    # the Default map.  The rules in the Default are applied to all object types.
+    Default : [
+        ('datatype', 'datatype', translate_type_name),
+        ('name', 'name'),
+        #(Constant("This is description"), 'description'),
+        (get_description, 'description'),
+        ],
 
-            # For common/global name mapps we can avoid repeated mapping definitions by defining them as equivalent in
-            # the Default map.  The rules in the Default are applied to all object types.
-            Default : [
-                ('datatype', 'datatype', translate_type_name),
-                ('name', 'name'),
-                #(Constant("This is description"), 'description'),
-                (get_description, 'description'),
-                ],
+    # Then follows type-specific mappings
 
-            # Then follows type-specific mappings
+    (inmodule.ASTClass1, outmodule.MyASTClass) :
+    # followed by array of attribute mapping
 
-            (inmodule.ASTClass1, outmodule.MyASTClass) :
-            # followed by array of attribute mapping
+    # Here an array of tuples is used. (Format is subject to change)
+    # (FROM-class on the left, TO-class on the right)
+    # *optional* transformation function as third argument
+    # Special case: Preparation(myfunc), which calls any function at that point in the list
+    [
+      ('this', 'that'),
 
-            # Here an array of tuples is used. (Format is subject to change)
-            # (FROM-class on the left, TO-class on the right)
-            # *optional* transformation function as third argument
-            # Special case: Preparation(myfunc), which calls any function at that point in the list
-            [
-              ('this', 'that'),
+      # Provide a field_transform function that will be called wit the input value ('name')
+      # to modify the value before it gets asigned to 'thename'.
+      ('name', 'thename', capitalize_name_string),
 
-              # Provide a field_transform function that will be called wit the input value ('name')
-              # to modify the value before it gets asigned to 'thename'.
-              ('name', 'thename', capitalize_name_string),
+      # A Preparation function will be called without assigning it to any output
+      # The mapping-tuples are processed in order, thus the preparation can be done before the
+      # ones that come after.
+      Preparation(pre_counter_init),
+      ('zero_based_counter', 'one_based_counter', lambda x : x + 1),
+      ('thing',  None),
 
-              # A Preparation function will be called without assigning it to any output
-              # The mapping-tuples are processed in order, thus the preparation can be done before the
-              # ones that come after.
-              Preparation(pre_counter_init),
-              ('zero_based_counter', 'one_based_counter', lambda x : x + 1),
-              ('thing',  None),
+      # Use a Constant object to always set the same value in target attribute
+      Constant("always this value"), 'information'), # 'information' set to same value regardless of inputs
 
-              # Use a Constant object to always set the same value in target attribute
-              Constant("always this value"), 'information'), # 'information' set to same value regardless of inputs
+      # Use a function ref (callable) to provide a callback function that generates the value
+      (my_function, 'dynamic') # Call the given function to generate the value for 'dynamic'
+     ]
 
-              # Use a function ref (callable) to provide a callback function that generates the value
-              (my_function, 'dynamic') # Call the given function to generate the value for 'dynamic'
-             ]
-
-            # Equally named types have no magic - it is still required to
-            # define that they shall be transformed/copied over.
-            (inmodule.AnotherType, outmodule.Anothertype), [
-                # Use a Constant object to always set the same value in target attribute
-                ('type', 'datatype')
-                ],
-            # ListOf and other features are not yet implemented -> when the need arises
-        }
+    # Equally named types have no magic - it is still required to
+    # define that they shall be transformed/copied over.
+    (inmodule.AnotherType, outmodule.Anothertype), [
+        # Use a Constant object to always set the same value in target attribute
+        ('type', 'datatype')
+        ],
+    # ListOf and other features are not yet implemented -> when the need arises
 }
 """
 
@@ -213,12 +209,12 @@ def set_attr(attrs_dict, attr_key, attr_value):
 # main loop:
 # Returns: (preparation_function, input_arg, output_arg, field_transform)
 
-def eval_mapping(type_map_entry):
-    if isinstance(type_map_entry, Preparation):
+def eval_mapping(map_entry):
+    if isinstance(map_entry, Preparation):
         # Return the function that is wrapped inside Preparation()
-        return (type_map_entry.func, None, None, None)
+        return (map_entry.func, None, None, None)
     else:  # 3 or 4-value tuple is expected (field_transform is optional)
-        input_arg, output_arg, *field_transform = type_map_entry
+        input_arg, output_arg, *field_transform = map_entry
         # Unwrap array and use identity-function if no transformation required
         field_transform = field_transform[0] if field_transform else lambda _ : _
 
@@ -305,7 +301,7 @@ def transform(mapping_table, input_obj):
         return input_obj
 
     # Find a translation rule in the metadata
-    for key, mappings in mapping_table['type_map'].items():
+    for key, mappings in mapping_table.items():
 
         # Skip the Default key as it is handled explicitly below
         if key == Default:
@@ -395,7 +391,7 @@ def transform(mapping_table, input_obj):
 
         # Process default mappings for attributes not already handled by a specific rule.
         _log("INFO", f"Start processing Default map for {type(input_obj)=}")
-        default_mappings = mapping_table['type_map'][Default]
+        default_mappings = mapping_table[Default]
 
         for preparation_function, input_attr, output_attr, field_transform in [eval_mapping(m) for m in default_mappings]:
 

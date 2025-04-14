@@ -101,82 +101,81 @@ def get_description(input_obj, output_attributes_so_far):
     return "Default text: This is " + output_attributes_so_far.get('name')
 
 mapping_table = {
-    'type_map' : {
-       # (Proto node type, IFEX node type)
-       # [ ... attribute mappings ...]
+   # (Proto node type, IFEX node type)
+   # [ ... attribute mappings ...]
 
-        Default : [
-            ('datatype', 'datatype', translate_type_name),
-            ('name', 'name'),
-            #(Constant("This is description"), 'description'),
-            (get_description, 'description'),
-            ],
-
-        (protobuf.Proto, ifex.Namespace): [
-            #('imports', 'includes'),
-            ('package', 'name'),
-            ('messages', 'structs'),
-            ('services', 'interface', pick_first),
-            ('options', None, handle_options),
+    Default : [
+        ('datatype', 'datatype', translate_type_name),
+        ('name', 'name'),
+        #(Constant("This is description"), 'description'),
+        (get_description, 'description'),
         ],
 
-        (protobuf.Service, ifex.Interface): [
-            ('rpcs', 'methods'),
-            ('options', None, handle_options),
-            ],
-
-        (protobuf.RPC, ifex.Method): [
-            ('input', 'input', rpc_parameter_message_to_params),
-            ('returns', 'returns', rpc_parameter_message_to_params),
-            ('options', None, handle_options),
-            ],
-
-        (protobuf.Enumeration, ifex.Enumeration): [
-            ('fields', 'options'),
-            ('options', None, handle_options),
-            ('reservations', Unsupported),
-            (Constant("int32"), 'datatype')
-            ],
-
-        (protobuf.EnumField, ifex.Option): [
-            ('options', None, handle_options),
-            ('value', 'value')
-            ],
-
-        (protobuf.Message, ifex.Struct): [
-            ('fields', 'members'),
-            ('options', None, handle_options),
-            ('enums', Unsupported),
-            ('messages', Unsupported),
-            ('oneofs', Unsupported),
-            ('mapfields', Unsupported),
-            ('mapfields', 'members'),
-            ('reservations', Unsupported)
-            ],
-
-        (protobuf.Field, ifex.Member): [
-            ('repeated', Unsupported),
-            ('optional', Unsupported),
-            ('options', None, handle_options),
-            ],
-        (protobuf.MapField, ifex.Member): [
-            ('options', None, handle_options),
-            ('keytype', None, map_keytype),
-            ('valuetype', None, map_valuetype),
-            (assemble_map_type, 'datatype'),
-            ],
-
-        (protobuf.Import, ifex.Include): [
-            ('path', 'file'),
+    (protobuf.Proto, ifex.Namespace): [
+        #('imports', 'includes'),
+        ('package', 'name'),
+        ('messages', 'structs'),
+        ('services', 'interface', pick_first),
+        ('options', None, handle_options),
+    ],
+    (protobuf.Service, ifex.Interface): [
+        ('rpcs', 'methods'),
+        ('options', None, handle_options),
         ],
 
-        (protobuf.Option, ifex.Include): [
-            ('name', None, handle_options),
+    (protobuf.RPC, ifex.Method): [
+        ('input', 'input', rpc_parameter_message_to_params),
+        ('returns', 'returns', rpc_parameter_message_to_params),
+        ('options', None, handle_options),
         ],
 
         (protobuf.MapField, ifex.Member): [ ],
         # TODO, go through any missing types
     }
+    (protobuf.Enumeration, ifex.Enumeration): [
+        ('fields', 'options'),
+        ('options', None, handle_options),
+        ('reservations', Unsupported),
+        (Constant("int32"), 'datatype')
+        ],
+
+    (protobuf.EnumField, ifex.Option): [
+        ('options', None, handle_options),
+        ('value', 'value')
+        ],
+
+    (protobuf.Message, ifex.Struct): [
+        ('fields', 'members'),
+        ('options', None, handle_options),
+        ('enums', Unsupported),
+        ('messages', Unsupported),
+        ('oneofs', Unsupported),
+        ('mapfields', 'members'),
+        ('reservations', Unsupported)
+        ],
+
+    (protobuf.Field, ifex.Member): [
+        ('repeated', Unsupported),
+        ('optional', Unsupported),
+        ('options', None, handle_options),
+        ],
+
+    (protobuf.MapField, ifex.Member): [
+        ('options', None, handle_options),
+        ('keytype', None, map_keytype),
+        ('valuetype', None, map_valuetype),
+        (assemble_map_type, 'datatype'),
+        ],
+
+    (protobuf.Import, ifex.Include): [
+        ('path', 'file'),
+    ],
+
+    (protobuf.Option, ifex.Include): [
+        ('name', None, handle_options),
+    ],
+
+    # TODO, go through any missing types
 }
 
 # ----------------------------------------------------------------------------
