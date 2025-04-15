@@ -7,9 +7,16 @@ and potentially other aspects of a system.  The core interface file (Interface
 Description Language, or Interface Description Model) shall contain only a
 _generic_ interface description that can be as widely applicable as possible.
 
-As such, it avoids including specific information that only applies in certain
+That way it avoids including specific information that only applies in certain
 interface contexts, such as anything specific to the chosen transport protocol,
 the programming language, and so on.
+
+This avoids something like [this example](https://github.com/open-telemetry/opentelemetry-proto/blob/v1.2.0/opentelemetry/proto/collector/metrics/v1/metrics_service.proto),
+which happens when options must be added to gRPC/protobuf definitions.
+In the example, OpenTelemetry supports multiple programming languages, but if
+you are not using CSharp, Java, or Go (and so on... new things are likely to be
+added as new support is added), then why should those irrelevant options be
+mixed into the interface description you are forced to use?
 
 Each new **Layer Type** defines what new metadata it provides to the overall
 model.  A Layer Type Specification may be written as a human-readable document,
